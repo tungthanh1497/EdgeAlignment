@@ -1,3 +1,4 @@
+
 package com.labters.documentscanner
 
 import android.content.Context
@@ -25,7 +26,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import org.opencv.core.MatOfPoint2f
-import java.util.*
 
 class DocumentScannerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -62,18 +62,22 @@ class DocumentScannerView @JvmOverloads constructor(
         }
     }
 
-    private fun initView() {
+    private fun initView(topLeft: PointF?, bottomRight: PointF?) {
         scope.launch {
             onLoad?.invoke(true)
             setImageRotation()
-            initializeCropping()
+            initializeCropping(topLeft, bottomRight)
             onLoad?.invoke(false)
         }
     }
 
     fun setImage(image: Bitmap) {
+        setImage(image, null, null)
+    }
+
+    fun setImage(image: Bitmap, topLeft: PointF?, bottomRight: PointF?) {
         selectedImage = image
-        doWhenInitialised { initView() }
+        doWhenInitialised { initView(topLeft, bottomRight) }
     }
 
     private suspend fun setImageRotation() {
@@ -107,7 +111,7 @@ class DocumentScannerView @JvmOverloads constructor(
         emit(Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true))
     }
 
-    private suspend fun initializeCropping() {
+    private suspend fun initializeCropping(topLeft: PointF?, bottomRight: PointF?) {
         val scaledBitmap: Bitmap = scaledBitmap(
             selectedImage,
             holder.width,
@@ -115,7 +119,7 @@ class DocumentScannerView @JvmOverloads constructor(
         ).first()
         image.setImageBitmap(scaledBitmap)
         val tempBitmap = (image.drawable as BitmapDrawable).bitmap
-        val pointFs = getEdgePoints(tempBitmap)
+        val pointFs = getEdgePoints(tempBitmap, topLeft, bottomRight)
         polygonView.points = pointFs
         polygonView.visibility = VISIBLE
         val padding = resources.getDimension(R.dimen.scanPadding).toInt() * 2
@@ -126,8 +130,21 @@ class DocumentScannerView @JvmOverloads constructor(
         polygonView.setPointColor(ContextCompat.getColor(context, R.color.blue))
     }
 
-    private fun getEdgePoints(tempBitmap: Bitmap): Map<Int, PointF>? {
-        val pointFs: List<PointF> = getContourEdgePoints(tempBitmap)
+    private fun getEdgePoints(
+        tempBitmap: Bitmap,
+        topLeft: PointF?,
+        bottomRight: PointF?
+    ): Map<Int, PointF>? {
+        val pointFs: List<PointF>
+        if (topLeft == null || bottomRight == null) {
+            pointFs = getContourEdgePoints(tempBitmap)
+        } else {
+            pointFs = ArrayList()
+            pointFs[0] = PointF(topLeft.x, topLeft.y)
+            pointFs[1] = PointF(bottomRight.x, topLeft.y)
+            pointFs[2] = PointF(topLeft.x, bottomRight.y)
+            pointFs[3] = PointF(bottomRight.x, bottomRight.y)
+        }
         return orderedValidEdgePoints(tempBitmap, pointFs)
     }
 
